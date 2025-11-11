@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Crypto Generators - Prak5</title>
+		<style>
+			body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; padding: 24px; background:#f7fafc; color:#111827 }
+			.container { max-width:720px; margin:0 auto; background:white; padding:20px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.06) }
+			label { display:block; margin-top:12px; font-weight:600 }
+			input, textarea, select { width:100%; padding:10px; margin-top:6px; border:1px solid #e5e7eb; border-radius:6px; box-sizing:border-box }
+			button { margin-top:12px; padding:10px 14px; background:#2563eb; color:white; border:none; border-radius:6px; cursor:pointer }
+			button:disabled { opacity:0.6; cursor:not-allowed }
+			.result { margin-top:18px; padding:12px; background:#f1f5f9; border-radius:6px }
+			.list-item { padding:8px; border-bottom:1px solid #e6eef8 }
+			.muted { color:#6b7280 }
+			code { background:#111827; color:#fff; padding:4px 6px; border-radius:4px; font-size:13px }
+		</style>
+	</head>
+	<body>
+		<div class="container">
+			<h1>API Key Generator</h1>
+			<p class="muted">Generate and manage API keys.</p>
+
+			<form id="apiKeyForm">
+				<label for="ak-username">Username *</label>
+				<input id="ak-username" name="username" required placeholder="e.g. john_doe" />
+
+				<label for="ak-name">Key name (optional)</label>
+				<input id="ak-name" name="name" placeholder="e.g. my-service" />
+
+				<button type="submit">Create API Key</button>
+			</form>
+
+			<div id="newKey" class="result" style="display:none"></div>
+			<div id="apikeys" class="result">Loading…</div>
+		</div>
+
+		<script>
+			const apikeyForm = document.getElementById('apiKeyForm');
+			const apikeysEl = document.getElementById('apikeys');
+			const newKeyEl = document.getElementById('newKey');
+
+			function escapeHtml(str) {
+				if (!str) return '';
+				return String(str)
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#039;');
+			}
+
+			async function loadApiKeys() {
+				try {
+					const res = await fetch('/api/apikey');
+					const json = await res.json();
+					if (!json || !Array.isArray(json.data)) {
+						apikeysEl.textContent = 'No data';
+						return;
+					}
+					if (json.data.length === 0) {
+						apikeysEl.textContent = 'No API keys yet.';
+						return;
+					}
+
+					apikeysEl.innerHTML = '';
+					json.data.slice().reverse().forEach(k => {
+						const div = document.createElement('div');
+						div.className = 'list-item';
+						div.innerHTML = `
+							<strong>nama: ${escapeHtml(k.username)}</strong><br>
+							<code style="margin-top:6px;display:block">api key: ${escapeHtml(k.key)}</code>
+							<div class="muted" style="font-size:12px;margin-top:6px">${escapeHtml(k.createdAt)}</div>
+						`;
+						apikeysEl.appendChild(div);
+					});
+				} catch (err) {
+					apikeysEl.textContent = 'Failed to load API keys';
+					console.error(err);
+				}
+			}
+
+			apikeyForm.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				const btn = apikeyForm.querySelector('button[type="submit"]');
+				btn.disabled = true;
+				const payload = { 
+					username: apikeyForm.username.value.trim(),
+					name: apikeyForm.name.value.trim() 
+				};
+				try {
+					const res = await fetch('/api/apikey', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify(payload)
+					});
+					const json = await res.json();
+					if (!res.ok) {
+						alert('Failed to create API key: ' + (json.error || json.message || 'unknown'));
+					} else {
+						const k = json.data;
+						newKeyEl.style.display = 'block';
+						newKeyEl.innerHTML = `
+							<strong>API key created — save it now</strong>
+							<div style="margin-top:8px">
+								<strong>nama:</strong> ${escapeHtml(k.username)}<br>
+								<strong style="margin-top:6px;display:block">api key:</strong>
+								<code id="newKeyValue" style="margin-top:6px;display:block">${escapeHtml(k.key)}</code>
+								<button id="copyNewKey" style="margin-top:8px">Copy</button>
+							</div>
+							<div class="muted" style="font-size:12px;margin-top:8px">Store it securely.</div>
+						`;
+						apikeyForm.reset();
+						await loadApiKeys();
+						const copyBtn = document.getElementById('copyNewKey');
+						if (copyBtn) {
+							copyBtn.addEventListener('click', async () => {
+								try {
+									await navigator.clipboard.writeText(k.key);
+									copyBtn.textContent = 'Copied';
+									setTimeout(() => { copyBtn.textContent = 'Copy'; }, 2000);
+								} catch (err) {
+									alert('Copy failed — select the key and copy manually.');
+								}
+							});
+						}
+					}
+				} catch (err) {
+					console.error(err);
+					alert('Network error creating API key');
+				} finally {
+					btn.disabled = false;
+				}
+			});
+
+			// initial load
+			loadApiKeys();
+		</script>
+	</body>
+</html>
+
